@@ -1,0 +1,39 @@
+services:
+  - type: web
+    name: sheguard-ai-backend
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: "pip install -r requirements.txt && alembic upgrade head"
+    startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    healthCheckPath: /api/v1/health/live
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: sheguard-ai-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: COMMUNICATION_PROVIDER_MODE
+        value: real
+      - key: SMS_PROVIDER
+        value: fast2sms
+      - key: FAST2SMS_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        value: https://iulrqqygrnbzoqkpwciu.supabase.co
+      - key: SUPABASE_BUCKET
+        value: sheguard-evidence
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: ROUTE_SAFETY_LIVE_BASE_URL
+        value: https://sheguard-ai-backend.onrender.com/api/v1/route-safety/live
+      - key: CORS_ORIGINS
+        value: "*"
+
+databases:
+  - name: sheguard-ai-db
+    plan: free
+    postgresMajorVersion: "16"

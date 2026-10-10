@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 and lower. The encrypted session store is never backed up (its Keystore key cannot be). -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="sheguard_secure_store.xml" />
+</full-backup-content>

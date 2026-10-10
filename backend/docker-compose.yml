@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: sheguard_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: sheguard_user
+      POSTGRES_PASSWORD: sheguard_password
+      POSTGRES_DB: sheguard_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sheguard_user -d sheguard_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    container_name: sheguard_backend_api
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      ENVIRONMENT: development
+      DATABASE_URL: postgresql://sheguard_user:sheguard_password@postgres:5432/sheguard_db
+      JWT_SECRET: dev_secret_key_change_in_production_32bytes_min_length
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: >
+      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+volumes:
+  postgres_data:

@@ -1,0 +1,62 @@
+# ===================================================================
+# SheGuard AI — monorepo .gitignore (React Native + Android + backend)
+# ===================================================================
+
+# ---- Secrets / local machine config — never commit ----
+.env
+.env.*
+!.env.example
+local.properties
+rn-config.json
+*.keystore
+*.jks
+*.p12
+
+# ---- Node / React Native ----
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.expo/
+*.orig.*
+web-build/
+
+# Metro / Hermes / RN build cache
+.metro-health-check*
+*.hbc
+
+# ---- Android / Gradle ----
+*.iml
+.gradle/
+.kotlin/
+.cxx/
+.externalNativeBuild/
+build/
+app/build/
+captures/
+.idea/
+*.hprof
+*.apk
+*.aab
+
+# ---- Python / FastAPI backend ----
+backend/__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+backend/venv/
+backend/env/
+.venv/
+*.sqlite3
+*.db
+backend/.pytest_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ---- OS / editor ----
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+.vscode/

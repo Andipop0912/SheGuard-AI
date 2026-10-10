@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- ReactActivity is an AppCompatActivity, so the theme must descend from Theme.AppCompat. -->
+    <style name="Theme.SheGuardAI" parent="Theme.AppCompat.Light.NoActionBar" />
+</resources>
