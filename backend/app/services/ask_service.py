@@ -83,7 +83,14 @@ class AskService:
                     "parts": [msg.content],
                 })
             chat = model.start_chat(history=history)
-            response = chat.send_message(last_user_text)
+            # Without an explicit timeout, a slow/hung Gemini response blocks this request
+            # indefinitely instead of returning a controlled error (observed: one model variant
+            # took 38s, another never returned within 90s). DeadlineExceeded is a
+            # GoogleAPICallError, so it is handled by the except clause below either way.
+            response = chat.send_message(
+                last_user_text,
+                request_options={"timeout": settings.GEMINI_REQUEST_TIMEOUT_SECONDS},
+            )
             reply = response.text.strip()
             if not reply:
                 raise AskServiceError("AI returned an empty response. Please try again.")

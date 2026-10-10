@@ -78,6 +78,9 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
     # Max tokens for a single Ask SheGuard response
     GEMINI_MAX_OUTPUT_TOKENS: int = 512
+    # A slow/hung Gemini call must not block a request indefinitely; it must fail with a
+    # controlled error instead (see ask_service.py).
+    GEMINI_REQUEST_TIMEOUT_SECONDS: float = float(os.getenv("GEMINI_REQUEST_TIMEOUT_SECONDS", "15.0"))
 
     class Config:
         case_sensitive = True
