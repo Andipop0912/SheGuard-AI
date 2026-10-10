@@ -25,10 +25,15 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # PostgreSQL: new enum values must be added outside a transaction block.
-    with op.get_context().autocommit_block():
-        op.execute("ALTER TYPE communication_status_enum ADD VALUE IF NOT EXISTS 'NOT_SENT'")
-        op.execute("ALTER TYPE communication_status_enum ADD VALUE IF NOT EXISTS 'UNCERTAIN'")
+    # PostgreSQL: new enum values must be added outside a transaction block. A dedicated
+    # AUTOCOMMIT connection (opened fresh, not switched mid-transaction) sidesteps Alembic's
+    # own autocommit_block()/transaction bookkeeping entirely, which proved unreliable when
+    # mixed with this project's per-step migration transactions.
+    bind = op.get_bind()
+    autocommit_engine = bind.engine.execution_options(isolation_level="AUTOCOMMIT")
+    with autocommit_engine.connect() as autocommit_conn:
+        autocommit_conn.execute(sa.text("ALTER TYPE communication_status_enum ADD VALUE IF NOT EXISTS 'NOT_SENT'"))
+        autocommit_conn.execute(sa.text("ALTER TYPE communication_status_enum ADD VALUE IF NOT EXISTS 'UNCERTAIN'"))
 
     op.add_column('emergency_communication_logs', sa.Column('reason_code', sa.String(length=64), nullable=True))
     op.add_column(

@@ -1,7 +1,7 @@
 import os
 import sys
 from logging.config import fileConfig
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import Column, MetaData, String, Table, engine_from_config, pool
 from alembic import context
 
 # Add current directory to path
@@ -20,6 +20,23 @@ target_metadata = Base.metadata
 
 def get_url():
     return settings.DATABASE_URL
+
+def _ensure_wide_version_table(connection) -> None:
+    """
+    Alembic's own alembic_version.version_num column defaults to VARCHAR(32), but this
+    project's revision ids are long descriptive names (e.g.
+    '002_phase2a_trusted_contacts_and_communication_logs', 53 chars) — create the tracking
+    table ourselves with a wide-enough column before Alembic's own lazy auto-create (which
+    always uses the narrow default) has a chance to run. No-op if the table already exists.
+    """
+    meta = MetaData()
+    Table("alembic_version", meta, Column("version_num", String(255), primary_key=True))
+    meta.create_all(connection, checkfirst=True)
+    # SQLAlchemy 2.0 "autobegins" an implicit transaction on that create_all call. Committing
+    # it here (rather than leaving it open) is what lets Alembic's own per-migration
+    # transactions (transaction_per_migration=True, below) start clean instead of silently
+    # inheriting and reusing this one for the entire run.
+    connection.commit()
 
 def run_migrations_offline() -> None:
     url = get_url()
@@ -46,8 +63,16 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
+        _ensure_wide_version_table(connection)
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection,
+            target_metadata=target_metadata,
+            # Each migration commits before the next starts. Needed so that migration 005's
+            # dedicated AUTOCOMMIT connection (for Postgres's ALTER TYPE ... ADD VALUE, which
+            # cannot run inside a transaction) can see enum types created by earlier,
+            # already-committed migrations — a second DB connection can't see another
+            # connection's uncommitted work.
+            transaction_per_migration=True,
         )
 
         with context.begin_transaction():
