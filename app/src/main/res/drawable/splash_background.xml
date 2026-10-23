@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Shown instantly as the Activity's starting window (android:windowBackground), before any
+  Kotlin or JS code runs, and replaced automatically once the first real frame is drawn. No
+  code, no library, no animation — the fastest possible splash.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/white" />
+    <item
+        android:width="180dp"
+        android:height="180dp"
+        android:gravity="center"
+        android:drawable="@drawable/splash_logo" />
+</layer-list>

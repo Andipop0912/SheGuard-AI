@@ -11,6 +11,7 @@ rn-config.json
 *.keystore
 *.jks
 *.p12
+app/signing.properties
 
 # ---- Node / React Native ----
 node_modules/

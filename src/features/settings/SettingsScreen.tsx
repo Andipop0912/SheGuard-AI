@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Linking, Platform, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Image, Linking, Platform, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useActivationStore } from '../../activation/store/activationStore';
 import { ActivationState } from '../../activation/domain/ActivationState';
@@ -214,6 +214,20 @@ export const SettingsScreen: React.FC<MainTabScreenProps<'Settings'>> = ({ navig
         testID="settings-legal-help"
       />
       <View style={[styles.infoCard, cardShadow, styles.gap]} testID="settings-about-card">
+        <View style={styles.aboutHeader}>
+          <Image
+            source={require('../../design/assets/sheguard_shield.png')}
+            style={styles.aboutLogo}
+            resizeMode="contain"
+            accessible={false}
+            accessibilityIgnoresInvertColors
+          />
+          <View>
+            <Text style={styles.aboutTitle}>SheGuard AI</Text>
+            <Text style={styles.aboutTagline}>Smarter Safety</Text>
+          </View>
+        </View>
+        <View style={styles.infoDivider} />
         <View style={styles.row}>
           <Text style={styles.rowLabel}>Version</Text>
           <Text style={styles.rowValue}>{APP_VERSION}</Text>
@@ -341,6 +355,10 @@ const styles = StyleSheet.create({
   infoTitle: { color: colors.textPrimary, fontSize: 15, fontWeight: '700' },
   infoBody: { color: colors.textSecondary, fontSize: 13, lineHeight: 19, marginTop: 8 },
   infoDivider: { height: 1, backgroundColor: colors.border, marginVertical: 10 },
+  aboutHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  aboutLogo: { width: 36, height: 36 },
+  aboutTitle: { color: colors.textPrimary, fontSize: 16, fontWeight: '700' },
+  aboutTagline: { color: colors.textMuted, fontSize: 12, marginTop: 2, letterSpacing: 0.5 },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   rowLabel: { color: colors.textSecondary, fontSize: 13 },
   rowValue: { color: colors.textPrimary, fontSize: 13, fontWeight: '600' },

@@ -71,6 +71,7 @@ const AuthForm: React.FC<{ mode: Mode; onDone: () => void; onSwitch: () => void 
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <Wordmark />
+          <Text style={styles.tagline}>Smarter Safety</Text>
           <Text style={styles.title}>{copy.title}</Text>
           <Text style={styles.subtitle}>{copy.subtitle}</Text>
 
@@ -159,6 +160,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
   content: { padding: spacing.screenHorizontal, paddingTop: 16 },
+  tagline: { ...typography.caption, color: colors.textMuted, marginTop: 4, letterSpacing: 0.5 },
   title: { ...typography.wordmark, color: colors.textPrimary, marginTop: 28 },
   subtitle: { ...typography.body, color: colors.textSecondary, marginTop: 6, marginBottom: 20 },
   label: { ...typography.caption, fontWeight: '600', color: colors.textPrimary, marginTop: 14, marginBottom: 6 },

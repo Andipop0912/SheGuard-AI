@@ -29,7 +29,7 @@ services:
       - key: SUPABASE_SECRET_KEY
         sync: false
       - key: ROUTE_SAFETY_LIVE_BASE_URL
-        value: https://sheguard-ai-backend.onrender.com/api/v1/route-safety/live
+        value: https://sheguard-ai-q4k1.onrender.com/api/v1/route-safety/live
       - key: CORS_ORIGINS
         value: "*"
 

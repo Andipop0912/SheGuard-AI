@@ -48,6 +48,27 @@ function buildGoogleMapsUrl(originLat: number, originLng: number, destination: s
   return `https://www.google.com/maps/dir/?api=1&origin=${saddr}&destination=${daddr}&travelmode=walking`;
 }
 
+/** Native rejections carry a stable `code` (see RouteSafetyGoogleModule.kt) the UI can show a truthful, distinct message for. */
+function describeGoogleApiError(e: unknown, fallback: string): string {
+  const code = e && typeof e === 'object' ? (e as { code?: unknown }).code : undefined;
+  switch (code) {
+    case 'NOT_CONFIGURED':
+      return 'Route planning is not configured in this build.';
+    case 'RATE_LIMITED':
+      return 'Too many requests right now. Please wait a moment and try again.';
+    case 'AUTH_ERROR':
+      return 'Route planning is temporarily unavailable (configuration issue). Please try again later.';
+    case 'SERVER_ERROR':
+      return 'Google Maps is temporarily unavailable. Please try again.';
+    case 'TIMEOUT':
+      return 'The request timed out. Check your connection and try again.';
+    case 'NETWORK':
+      return 'No connection to Google Maps right now. Check your network and try again.';
+    default:
+      return e instanceof Error && e.message ? e.message : fallback;
+  }
+}
+
 function formatDistance(meters: number): string {
   return meters < 1000 ? `${Math.round(meters)} m` : `${(meters / 1000).toFixed(1)} km`;
 }
@@ -153,14 +174,14 @@ export const RouteSafetyScreen: React.FC<RootStackScreenProps<'RouteSafety'>> = 
       try {
         geocoded = await google.geocodeText(dest, fix);
       } catch (e) {
-        Alert.alert('Could not find that destination', e instanceof Error ? e.message : 'Try a more specific address or place name.');
+        Alert.alert('Could not find that destination', describeGoogleApiError(e, 'Try a more specific address or place name.'));
         return;
       }
       let computed;
       try {
         computed = await google.computeRoute(fix, geocoded);
       } catch (e) {
-        Alert.alert('Could not calculate a route', e instanceof Error ? e.message : 'Please try again.');
+        Alert.alert('Could not calculate a route', describeGoogleApiError(e, 'Please try again.'));
         return;
       }
 
@@ -228,7 +249,7 @@ export const RouteSafetyScreen: React.FC<RootStackScreenProps<'RouteSafety'>> = 
                     key={loc.placeId}
                     coordinate={{ latitude: loc.latitude, longitude: loc.longitude }}
                     title={loc.name}
-                    description={`${formatDistance(loc.distanceMeters)} ${loc.distanceIsAlongRoute ? 'ahead' : 'away (straight-line)'}`}
+                    description={`${formatDistance(loc.distanceAheadMeters)} ahead · ${formatDistance(loc.distanceFromRouteMeters)} from route`}
                     pinColor={colors.infoBlue}
                   />
                 ))}
@@ -333,9 +354,10 @@ export const RouteSafetyScreen: React.FC<RootStackScreenProps<'RouteSafety'>> = 
                       <View key={loc.placeId} style={styles.safeLocationRow} testID={`route-safe-location-${loc.category}`}>
                         <Icon name={CATEGORY_ICON[loc.category]} size={16} color={colors.infoBlue} />
                         <Text style={styles.safeLocationName} numberOfLines={1}>{loc.name}</Text>
-                        <Text style={styles.safeLocationDistance}>
-                          {formatDistance(loc.distanceMeters)} {loc.distanceIsAlongRoute ? 'ahead' : '(straight-line)'}
-                        </Text>
+                        <View style={styles.safeLocationDistanceCol}>
+                          <Text style={styles.safeLocationDistance}>{formatDistance(loc.distanceAheadMeters)} ahead</Text>
+                          <Text style={styles.safeLocationDistanceSub}>{formatDistance(loc.distanceFromRouteMeters)} from route</Text>
+                        </View>
                       </View>
                     ))}
                   </>
@@ -395,7 +417,9 @@ const styles = StyleSheet.create({
   divider: { height: 1, backgroundColor: colors.border, marginHorizontal: -16 },
   safeLocationRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 },
   safeLocationName: { flex: 1, ...typography.caption, color: colors.textPrimary },
+  safeLocationDistanceCol: { alignItems: 'flex-end' },
   safeLocationDistance: { ...typography.caption, color: colors.textMuted },
+  safeLocationDistanceSub: { fontSize: 10, color: colors.textMuted },
   endButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 12, paddingVertical: 10 },
   endButtonText: { fontSize: 14, fontWeight: '700', color: colors.emergencyRed },
   safetyNote: { fontSize: 12, fontWeight: '400', color: colors.textMuted, marginTop: 12, lineHeight: 17 },

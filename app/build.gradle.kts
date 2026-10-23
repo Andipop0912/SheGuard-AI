@@ -3,7 +3,6 @@ import java.util.Properties
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.kotlin.compose)
     id("com.facebook.react")
 }
 
@@ -51,6 +50,44 @@ android {
         (props.getProperty("MAPS_API_KEY") ?: System.getenv("MAPS_API_KEY") ?: "").trim()
     }
 
+    // Release signing: credentials come from env vars, or a local gitignored
+    // app/signing.properties (see signing.properties.example) — never from source control.
+    // Missing credentials fall back to debug signing (with a build warning) so local/CI
+    // `assembleRelease` keeps working without a production keystore.
+    val signingProps = Properties().apply {
+        val propsFile = file("signing.properties")
+        if (propsFile.exists()) propsFile.inputStream().use { load(it) }
+    }
+    fun signingValue(propKey: String, envKey: String): String? =
+        signingProps.getProperty(propKey)?.takeIf { it.isNotBlank() }
+            ?: System.getenv(envKey)?.takeIf { it.isNotBlank() }
+
+    val releaseStoreFile = signingValue("storeFile", "SHEGUARD_RELEASE_STORE_FILE")
+    val releaseStorePassword = signingValue("storePassword", "SHEGUARD_RELEASE_STORE_PASSWORD")
+    val releaseKeyAlias = signingValue("keyAlias", "SHEGUARD_RELEASE_KEY_ALIAS")
+    val releaseKeyPassword = signingValue("keyPassword", "SHEGUARD_RELEASE_KEY_PASSWORD")
+    val hasReleaseSigningConfig = listOf(
+        releaseStoreFile, releaseStorePassword, releaseKeyAlias, releaseKeyPassword
+    ).all { !it.isNullOrBlank() }
+
+    if (!hasReleaseSigningConfig) {
+        logger.warn(
+            "SheGuard: no release signing credentials found (signing.properties or " +
+                "SHEGUARD_RELEASE_* env vars) — release build will fall back to debug signing."
+        )
+    }
+
+    signingConfigs {
+        if (hasReleaseSigningConfig) {
+            create("release") {
+                storeFile = file(releaseStoreFile!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     defaultConfig {
         applicationId = "com.sheguardai.app"
         minSdk = 26
@@ -74,6 +111,12 @@ android {
         release {
             isMinifyEnabled = false
 
+            signingConfig = if (hasReleaseSigningConfig) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
+
             proguardFiles(
                 getDefaultProguardFile(
                     "proguard-android-optimize.txt"
@@ -93,7 +136,6 @@ android {
     }
 
     buildFeatures {
-        compose = true
         buildConfig = true
     }
 }
@@ -116,27 +158,6 @@ dependencies {
     // =========================================
 
     implementation(libs.androidx.core.ktx)
-
-
-    // =========================================
-    // Activity + Jetpack Compose
-    // =========================================
-
-    implementation(libs.androidx.activity.compose)
-
-    implementation(
-        platform(libs.androidx.compose.bom)
-    )
-
-    implementation(libs.androidx.ui)
-
-    implementation(libs.androidx.ui.graphics)
-
-    implementation(
-        libs.androidx.ui.tooling.preview
-    )
-
-    implementation(libs.androidx.material3)
 
 
     // =========================================
@@ -180,6 +201,16 @@ dependencies {
 
 
     // =========================================
+    // Places SDK for Android (New) — Android-app-restricted key support for
+    // Text Search / Nearby Search, unlike direct Places API (New) REST calls.
+    // =========================================
+
+    implementation(
+        libs.places.android
+    )
+
+
+    // =========================================
     // Local Unit Tests
     // =========================================
 
@@ -196,26 +227,5 @@ dependencies {
 
     androidTestImplementation(
         libs.androidx.espresso.core
-    )
-
-    androidTestImplementation(
-        platform(libs.androidx.compose.bom)
-    )
-
-    androidTestImplementation(
-        libs.androidx.ui.test.junit4
-    )
-
-
-    // =========================================
-    // Debug / Compose Testing
-    // =========================================
-
-    debugImplementation(
-        libs.androidx.ui.tooling
-    )
-
-    debugImplementation(
-        libs.androidx.ui.test.manifest
     )
 }

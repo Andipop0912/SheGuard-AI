@@ -15,6 +15,7 @@ import React, { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -65,15 +66,26 @@ const UserBubble: React.FC<{ text: string; testID?: string }> = ({ text, testID 
   </View>
 );
 
+// SheGuard AI's identity avatar, shown once per assistant message (never as bubble decoration).
+const AssistantAvatar: React.FC = () => (
+  <View style={styles.assistantIcon}>
+    <Image
+      source={require('../../design/assets/sheguard_shield.png')}
+      style={styles.assistantIconImage}
+      resizeMode="contain"
+      accessible={false}
+      accessibilityIgnoresInvertColors
+    />
+  </View>
+);
+
 const AssistantBubble: React.FC<{ text: string; isError?: boolean; testID?: string }> = ({
   text,
   isError,
   testID,
 }) => (
   <View style={styles.assistantRow} testID={testID}>
-    <View style={[styles.assistantIcon]}>
-      <Icon name="shield" size={16} color={colors.white} />
-    </View>
+    <AssistantAvatar />
     <View style={[styles.assistantBubble, isError && styles.errorBubble]}>
       <Text style={[styles.assistantText, isError && styles.errorText]}>{text}</Text>
     </View>
@@ -82,9 +94,7 @@ const AssistantBubble: React.FC<{ text: string; isError?: boolean; testID?: stri
 
 const TypingIndicator: React.FC = () => (
   <View style={styles.assistantRow} testID="ask-typing">
-    <View style={styles.assistantIcon}>
-      <Icon name="shield" size={16} color={colors.white} />
-    </View>
+    <AssistantAvatar />
     <View style={styles.assistantBubble}>
       <ActivityIndicator size="small" color={colors.primaryNavy} />
     </View>
@@ -339,11 +349,14 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: colors.primaryNavy,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
   },
+  assistantIconImage: { width: 22, height: 22 },
   assistantBubble: {
     backgroundColor: colors.surface,
     borderRadius: radii.card,

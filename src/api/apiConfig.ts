@@ -14,7 +14,7 @@ declare const __DEV__: boolean;
 // which Wi-Fi/tethering network the PC is on. For airplane-mode (offline) tests use the PC's
 // Wi-Fi address instead, e.g. 'http://192.168.137.18:8000/api/v1' on the phone's hotspot.
 export const DEV_API_BASE_URL = 'http://localhost:8000/api/v1';
-export const RELEASE_API_BASE_URL: string | null = null;
+export const RELEASE_API_BASE_URL: string | null = 'https://sheguard-ai-q4k1.onrender.com/api/v1';
 
 export const API_TIMEOUT_MS = 10_000;
 export const APP_VERSION = '1.0.0';

@@ -66,6 +66,38 @@ function distanceToSegmentMeters(point: RoutePoint, a: RoutePoint, b: RoutePoint
   return Math.sqrt((p.x - projX) ** 2 + (p.y - projY) ** 2);
 }
 
+/** Total length of `routePolyline`, in meters (sum of segment lengths). */
+export function routeLengthMeters(routePolyline: RoutePoint[]): number {
+  let total = 0;
+  for (let i = 0; i < routePolyline.length - 1; i++) {
+    total += metersBetween(routePolyline[i], routePolyline[i + 1]);
+  }
+  return total;
+}
+
+/**
+ * The point on `routePolyline` at `targetMeters` along its length (clamped to the route's
+ * extent). Used to pick evenly-spaced search points along a route for the safe-locations
+ * corridor search, independent of how densely the polyline's own vertices are spaced.
+ */
+export function pointAtDistanceAlongRoute(routePolyline: RoutePoint[], targetMeters: number): RoutePoint {
+  if (routePolyline.length === 0) return { latitude: 0, longitude: 0 };
+  if (routePolyline.length === 1 || targetMeters <= 0) return routePolyline[0];
+
+  let cumulative = 0;
+  for (let i = 0; i < routePolyline.length - 1; i++) {
+    const a = routePolyline[i];
+    const b = routePolyline[i + 1];
+    const segmentLength = metersBetween(a, b);
+    if (cumulative + segmentLength >= targetMeters) {
+      const t = segmentLength === 0 ? 0 : (targetMeters - cumulative) / segmentLength;
+      return { latitude: a.latitude + (b.latitude - a.latitude) * t, longitude: a.longitude + (b.longitude - a.longitude) * t };
+    }
+    cumulative += segmentLength;
+  }
+  return routePolyline[routePolyline.length - 1];
+}
+
 /** Nearest distance from `point` to any segment of `routePolyline`, in meters. */
 export function distanceToRouteMeters(point: RoutePoint, routePolyline: RoutePoint[]): number {
   if (routePolyline.length === 0) return Infinity;

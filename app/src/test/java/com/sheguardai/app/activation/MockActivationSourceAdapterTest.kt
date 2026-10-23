@@ -1,5 +1,6 @@
 package com.sheguardai.app.activation
 
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -31,7 +32,7 @@ class MockActivationSourceAdapterTest {
 
             adapter.startListening()
 
-            val requestDeferred = async {
+            val requestDeferred = async(start = CoroutineStart.UNDISPATCHED) {
                 adapter
                     .observeRequests()
                     .first()
@@ -82,7 +83,7 @@ class MockActivationSourceAdapterTest {
 
             adapter.startListening()
 
-            val requestDeferred = async {
+            val requestDeferred = async(start = CoroutineStart.UNDISPATCHED) {
                 adapter
                     .observeRequests()
                     .first()

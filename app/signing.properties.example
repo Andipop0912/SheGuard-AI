@@ -1,0 +1,13 @@
+# Copy to app/signing.properties (gitignored) to sign release builds with a real key.
+# Alternatively set the equivalent SHEGUARD_RELEASE_* environment variables instead of
+# using this file — either source works, and neither is ever committed.
+#
+# Create the release keystore locally with (adjust validity/alias as needed):
+#   keytool -genkeypair -v -keystore sheguard-release.keystore -alias sheguard-release ^
+#     -keyalg RSA -keysize 2048 -validity 10000
+#
+# storeFile is resolved relative to the app/ module directory.
+storeFile=sheguard-release.keystore
+storePassword=CHANGE_ME
+keyAlias=sheguard-release
+keyPassword=CHANGE_ME

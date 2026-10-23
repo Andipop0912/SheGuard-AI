@@ -10,6 +10,14 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.WritableArray
 import com.facebook.react.bridge.WritableMap
+import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.maps.model.LatLng
+import com.google.android.libraries.places.api.Places
+import com.google.android.libraries.places.api.model.CircularBounds
+import com.google.android.libraries.places.api.model.Place
+import com.google.android.libraries.places.api.net.PlacesClient
+import com.google.android.libraries.places.api.net.SearchByTextRequest
+import com.google.android.libraries.places.api.net.SearchNearbyRequest
 import com.sheguardai.app.BuildConfig
 import org.json.JSONArray
 import org.json.JSONObject
@@ -24,22 +32,67 @@ import java.util.concurrent.Executors
  *
  * The Maps/Places/Routes API key is Android-app-restricted (package + SHA-1 cert) and, per this
  * codebase's existing convention (see AppConfigModule / mapsConfig.ts), never reaches JavaScript.
- * These REST calls therefore happen here in Kotlin, with the Android-restriction headers Google
- * requires for server-style REST calls from a key that is restricted to this Android app.
+ *
+ * IMPORTANT (confirmed against Google's own documentation — see docs for
+ * api-security-best-practices and the Places API (New) web-service FAQ): an Android-restricted
+ * key is only supported for Google's client SDKs (Maps SDK for Android, Places SDK for Android,
+ * Navigation SDK for Android) — NOT for direct REST calls to places.googleapis.com /
+ * routes.googleapis.com, which is why the raw HTTP approach below produced
+ * `API_KEY_ANDROID_APP_BLOCKED`. Places lookups therefore go through the official Places SDK for
+ * Android (New) (`placesClient()` below), which IS Android-restriction-compatible. Routes
+ * computation has no equivalent Android-restriction-compatible client SDK for arbitrary two-point
+ * route geometry (Navigation SDK is a full turn-by-turn product, not a drop-in polyline
+ * provider), so `computeRoute` below still makes the same direct REST call and will continue to
+ * fail under an Android-restricted key — this is a known, reported limitation, not silently
+ * worked around with fake data.
  */
 class RouteSafetyGoogleModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
 
     companion object {
         private const val TAG = "SheGuardRouteSafety"
         private const val ROUTES_URL = "https://routes.googleapis.com/directions/v2:computeRoutes"
-        private const val PLACES_URL = "https://places.googleapis.com/v1/places:searchNearby"
-        private const val TEXT_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText"
         private const val MAX_PLACES = 20
+
+        @Volatile
+        private var cachedPlacesClient: PlacesClient? = null
+        @Volatile
+        private var placesInitialized = false
     }
 
     private val executor = Executors.newCachedThreadPool()
 
     override fun getName(): String = "SheGuardRouteSafetyModule"
+
+    /** Lazily initializes the Places SDK (idempotent) and returns a client, or null if no key is configured. */
+    private fun placesClient(): PlacesClient? {
+        if (BuildConfig.GOOGLE_MAPS_API_KEY.isEmpty()) return null
+        cachedPlacesClient?.let { return it }
+        synchronized(this) {
+            cachedPlacesClient?.let { return it }
+            return try {
+                val appContext = reactApplicationContext.applicationContext
+                if (!placesInitialized) {
+                    Places.initializeWithNewPlacesApiEnabled(appContext, BuildConfig.GOOGLE_MAPS_API_KEY)
+                    placesInitialized = true
+                }
+                Places.createClient(appContext).also { cachedPlacesClient = it }
+            } catch (e: Exception) {
+                Log.e(TAG, "Could not initialize Places SDK", e)
+                null
+            }
+        }
+    }
+
+    /** Classifies a Places SDK failure the same way httpStatusToErrorCode classifies a REST failure. */
+    private fun placesExceptionToErrorCode(exception: Exception): String {
+        val statusCode = (exception as? ApiException)?.statusCode
+        Log.w(TAG, "Places SDK call failed: ${exception.javaClass.simpleName}" + (statusCode?.let { " (status $it)" } ?: ""))
+        return when (statusCode) {
+            7 -> "NETWORK" // com.google.android.gms.common.api.CommonStatusCodes.NETWORK_ERROR
+            8 -> "SERVER_ERROR" // CommonStatusCodes.INTERNAL_ERROR
+            else -> "PLACES_SEARCH_FAILED"
+        }
+    }
 
     private fun androidCertFingerprint(): String? {
         return try {
@@ -76,6 +129,9 @@ class RouteSafetyGoogleModule(reactContext: ReactApplicationContext) : ReactCont
         }
     }
 
+    /** Thrown with a stable `code` the JS layer can branch on, instead of a raw HTTP number. */
+    class GoogleApiException(val code: String, message: String) : Exception(message)
+
     private fun postJson(urlString: String, fieldMask: String, body: JSONObject): JSONObject {
         val connection = URL(urlString).openConnection() as HttpURLConnection
         try {
@@ -95,13 +151,27 @@ class RouteSafetyGoogleModule(reactContext: ReactApplicationContext) : ReactCont
             val stream = if (code in 200..299) connection.inputStream else connection.errorStream
             val text = stream.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
             if (code !in 200..299) {
+                // Never log the API key itself — only the response body, which Google does not echo it into.
                 Log.w(TAG, "Google API call to $urlString failed with HTTP $code: $text")
-                throw RuntimeException("Google API error (HTTP $code)")
+                throw GoogleApiException(httpStatusToErrorCode(code), "Google API error (HTTP $code)")
             }
             return JSONObject(text)
+        } catch (e: java.net.SocketTimeoutException) {
+            throw GoogleApiException("TIMEOUT", "Google API request timed out")
+        } catch (e: java.io.IOException) {
+            throw GoogleApiException("NETWORK", e.message ?: "Network error reaching Google API")
         } finally {
             connection.disconnect()
         }
+    }
+
+    /** Maps an HTTP status to a stable category the JS layer can show a truthful, distinct message for. */
+    private fun httpStatusToErrorCode(httpStatus: Int): String = when (httpStatus) {
+        401, 403 -> "AUTH_ERROR"
+        429 -> "RATE_LIMITED"
+        in 400..499 -> "CLIENT_ERROR"
+        in 500..599 -> "SERVER_ERROR"
+        else -> "UNKNOWN_ERROR"
     }
 
     /**
@@ -147,103 +217,89 @@ class RouteSafetyGoogleModule(reactContext: ReactApplicationContext) : ReactCont
                 result.putArray("polyline", polylineArray)
                 promise.resolve(result)
             } catch (e: Exception) {
-                promise.reject("ROUTE_COMPUTE_FAILED", e.message, e)
+                promise.reject((e as? GoogleApiException)?.code ?: "ROUTE_COMPUTE_FAILED", e.message, e)
             }
         }
     }
 
     /**
      * Resolves free-text (an address or a place name) to coordinates, biased near the device's
-     * current location, using Places API (New) Text Search. Never fabricates a destination:
-     * no match rejects the promise.
+     * current location, using the Places SDK for Android (New) Text Search — not a direct REST
+     * call, because Google does not support Android-app-restricted keys for the raw
+     * places.googleapis.com web service (confirmed against Google's own documentation; see the
+     * class-level comment). Never fabricates a destination: no match rejects the promise.
      */
     @ReactMethod
     fun geocodeText(query: String, biasLat: Double, biasLng: Double, promise: Promise) {
-        executor.execute {
-            try {
-                if (BuildConfig.GOOGLE_MAPS_API_KEY.isEmpty()) {
-                    promise.reject("NOT_CONFIGURED", "Google Maps API key is not configured in this build")
-                    return@execute
-                }
-                val body = JSONObject().apply {
-                    put("textQuery", query)
-                    put(
-                        "locationBias",
-                        JSONObject().put(
-                            "circle",
-                            JSONObject()
-                                .put("center", JSONObject().put("latitude", biasLat).put("longitude", biasLng))
-                                .put("radius", 50_000.0)
-                        )
-                    )
-                    put("maxResultCount", 1)
-                }
-                val json = postJson(TEXT_SEARCH_URL, "places.displayName,places.formattedAddress,places.location", body)
-                val places = json.optJSONArray("places")
-                if (places == null || places.length() == 0) {
+        val client = placesClient()
+        if (client == null) {
+            promise.reject("NOT_CONFIGURED", "Google Maps API key is not configured in this build")
+            return
+        }
+        val placeFields = listOf(Place.Field.DISPLAY_NAME, Place.Field.FORMATTED_ADDRESS, Place.Field.LOCATION)
+        val bias = CircularBounds.newInstance(LatLng(biasLat, biasLng), 50_000.0)
+        val request = SearchByTextRequest.builder(query, placeFields)
+            .setLocationBias(bias)
+            .setMaxResultCount(1)
+            .build()
+
+        client.searchByText(request)
+            .addOnSuccessListener { response ->
+                val place = response.places.firstOrNull()
+                val location = place?.location
+                if (place == null || location == null) {
                     promise.reject("NOT_FOUND", "No place matched '$query'")
-                    return@execute
-                }
-                val place = places.getJSONObject(0)
-                val location = place.optJSONObject("location")
-                if (location == null) {
-                    promise.reject("NOT_FOUND", "Place had no coordinates")
-                    return@execute
+                    return@addOnSuccessListener
                 }
                 val result: WritableMap = Arguments.createMap()
-                result.putDouble("latitude", location.optDouble("latitude"))
-                result.putDouble("longitude", location.optDouble("longitude"))
-                result.putString("formattedAddress", place.optString("formattedAddress", query))
+                result.putDouble("latitude", location.latitude)
+                result.putDouble("longitude", location.longitude)
+                result.putString("formattedAddress", place.formattedAddress ?: query)
                 promise.resolve(result)
-            } catch (e: Exception) {
-                promise.reject("GEOCODE_FAILED", e.message, e)
             }
-        }
+            .addOnFailureListener { exception ->
+                promise.reject(placesExceptionToErrorCode(exception), exception.message, exception)
+            }
     }
 
-    /** `placeType` is a Google Places (New) type, e.g. "hospital", "police", "fire_station". */
+    /**
+     * `placeType` is a Google Places (New) type, e.g. "hospital", "police", "fire_station".
+     * Uses the Places SDK for Android (New) Nearby Search — see geocodeText's doc comment for why
+     * this is not a direct REST call.
+     */
     @ReactMethod
     fun searchNearbyPlaces(latitude: Double, longitude: Double, radiusMeters: Double, placeType: String, promise: Promise) {
-        executor.execute {
-            try {
-                if (BuildConfig.GOOGLE_MAPS_API_KEY.isEmpty()) {
-                    promise.reject("NOT_CONFIGURED", "Google Maps API key is not configured in this build")
-                    return@execute
-                }
-                val body = JSONObject().apply {
-                    put("includedTypes", JSONArray().put(placeType))
-                    put("maxResultCount", MAX_PLACES)
-                    put(
-                        "locationRestriction",
-                        JSONObject().put(
-                            "circle",
-                            JSONObject()
-                                .put("center", JSONObject().put("latitude", latitude).put("longitude", longitude))
-                                .put("radius", radiusMeters)
-                        )
-                    )
-                }
-                val fieldMask = "places.displayName,places.formattedAddress,places.location,places.id"
-                val json = postJson(PLACES_URL, fieldMask, body)
-                val places = json.optJSONArray("places") ?: JSONArray()
+        val client = placesClient()
+        if (client == null) {
+            promise.reject("NOT_CONFIGURED", "Google Maps API key is not configured in this build")
+            return
+        }
+        val placeFields = listOf(Place.Field.ID, Place.Field.DISPLAY_NAME, Place.Field.FORMATTED_ADDRESS, Place.Field.LOCATION)
+        // Nearby Search (New) requires a radius in (0, 50000] metres.
+        val circle = CircularBounds.newInstance(LatLng(latitude, longitude), radiusMeters.coerceIn(1.0, 50_000.0))
+        val request = SearchNearbyRequest.builder(circle, placeFields)
+            .setIncludedTypes(listOf(placeType))
+            .setMaxResultCount(MAX_PLACES)
+            .build()
 
+        client.searchNearby(request)
+            .addOnSuccessListener { response ->
                 val result: WritableArray = Arguments.createArray()
-                for (i in 0 until places.length()) {
-                    val place = places.getJSONObject(i)
-                    val location = place.optJSONObject("location")
+                response.places.forEach { place ->
+                    val location = place.location
                     val item: WritableMap = Arguments.createMap()
-                    item.putString("placeId", place.optString("id", ""))
-                    item.putString("name", place.optJSONObject("displayName")?.optString("text") ?: "")
-                    item.putString("address", place.optString("formattedAddress", ""))
-                    item.putDouble("latitude", location?.optDouble("latitude") ?: 0.0)
-                    item.putDouble("longitude", location?.optDouble("longitude") ?: 0.0)
+                    item.putString("placeId", place.id ?: "")
+                    item.putString("name", place.displayName ?: "")
+                    item.putString("address", place.formattedAddress ?: "")
+                    item.putDouble("latitude", location?.latitude ?: 0.0)
+                    item.putDouble("longitude", location?.longitude ?: 0.0)
                     result.pushMap(item)
                 }
                 promise.resolve(result)
-            } catch (e: Exception) {
-                promise.reject("PLACES_SEARCH_FAILED", e.message, e)
             }
-        }
+            .addOnFailureListener { exception ->
+                promise.reject(placesExceptionToErrorCode(exception), exception.message, exception)
+            }
     }
 
     private fun parseDurationSeconds(duration: String?): Int? {

@@ -2,5 +2,9 @@
 <resources>
 
     <!-- ReactActivity is an AppCompatActivity, so the theme must descend from Theme.AppCompat. -->
-    <style name="Theme.SheGuardAI" parent="Theme.AppCompat.Light.NoActionBar" />
+    <!-- windowBackground is the Activity's starting window: the official shield shows instantly
+         at launch, before any Kotlin/JS code runs, with no splash library or extra code needed. -->
+    <style name="Theme.SheGuardAI" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="android:windowBackground">@drawable/splash_background</item>
+    </style>
 </resources>

@@ -1,7 +1,7 @@
 import hashlib
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 from fastapi import HTTPException, status
@@ -20,6 +20,8 @@ from app.services.route_safety_message_builder import log_shim
 from app.services.supabase_storage import SupabaseStorageClient
 
 logger = logging.getLogger(__name__)
+
+IST = timezone(timedelta(hours=5, minutes=30), name="IST")
 
 REASON_CHANNEL_UNAVAILABLE = "channel_not_available"
 REASON_PROVIDER_ERROR = "provider_error"
@@ -144,8 +146,18 @@ async def run_evidence_delivery_workflow(
     if claimed == 0:
         return 0  # another request already claimed it
 
-    report = await generate_and_upload_report(db, user, event_id, storage)
-    report_url = await storage.create_signed_url(report.storage_path) if report.storage_path else None
+    # The delivery claim above is already committed: a PDF-generation exception here must never
+    # abort delivery entirely (trusted contacts still need the audio link, and the claim can
+    # never be retaken to retry later). Only an actual Supabase upload failure is represented in
+    # `report.upload_status`; a raised exception (e.g. a ReportLab rendering error) is caught and
+    # simply means no report link goes out this time — it never claims success and never blocks
+    # the SMS notification loop below.
+    report_url = None
+    try:
+        report = await generate_and_upload_report(db, user, event_id, storage)
+        report_url = await storage.create_signed_url(report.storage_path) if report.storage_path else None
+    except Exception as exc:
+        logger.warning(f"Incident report generation failed for event {event.event_id}: {exc}")
 
     evidence_items = db.query(EvidenceItem).filter(EvidenceItem.event_id == event.event_id, EvidenceItem.upload_status == EvidenceUploadStatusEnum.UPLOADED).all()
     audio_url = None
@@ -173,7 +185,8 @@ async def run_evidence_delivery_workflow(
             db.commit()
             continue
 
-        lines = ["SHEGUARD EMERGENCY EVIDENCE", "", f"Incident: {event.event_id}"]
+        at = datetime.now(timezone.utc).astimezone(IST).strftime("%H:%M")
+        lines = ["SHEGUARD EMERGENCY EVIDENCE", "", f"User: {user.phone}", f"Time: {at} IST"]
         if report_url:
             lines += ["", "Incident Report:", report_url]
         if audio_url:

@@ -98,7 +98,7 @@ describe('Phase 3A/3B — navigation, Home and Emergency', () => {
 
     act(() => navigationRef.navigate('MainTabs', { screen: 'Home' }));
     await screen.findByTestId('home-unarmed');
-    fireEvent.press(screen.getByTestId('home-ask'));
+    fireEvent.press(screen.getByTestId('home-ask-fab'));
     await waitFor(() => expect(screen.getByTestId('ask-sheguard-screen')).toBeTruthy());
   });
 

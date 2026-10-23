@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Alert, Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useActivationStore } from '../../activation/store/activationStore';
 import { ActivationState } from '../../activation/domain/ActivationState';
@@ -8,7 +8,7 @@ import { isOpenEmergencyState } from '../../emergency/domain/EmergencyState';
 import { useVoiceStore } from '../../voice/store/voiceStore';
 import { useLocationStore } from '../../location/store/locationStore';
 import { MainTabScreenProps } from '../../navigation/types';
-import { colors, spacing } from '../../design/tokens';
+import { cardShadow, colors, spacing } from '../../design/tokens';
 import { Icon } from '../../design/Icon';
 import { Wordmark } from '../../design/components/Wordmark';
 import { SosButton, SosButtonState } from '../../design/components/SosButton';
@@ -153,15 +153,6 @@ export const HomeScreen: React.FC<MainTabScreenProps<'Home'>> = ({ navigation })
 
         <View style={styles.gap}>
           <NavCard
-            icon="chat-bubble-outline"
-            title="Ask SheGuard"
-            subtitle="Get help, legal info or guidance"
-            onPress={openAsk}
-            testID="home-ask"
-          />
-        </View>
-        <View style={styles.gap}>
-          <NavCard
             icon="map"
             title="Route Safety"
             subtitle="Plan a route and open in Google Maps"
@@ -173,6 +164,24 @@ export const HomeScreen: React.FC<MainTabScreenProps<'Home'>> = ({ navigation })
           <LocationRow label={location.value} tone={location.tone} onPress={openLocation} dark={isArmed} />
         </View>
       </ScrollView>
+
+      <Pressable
+        style={({ pressed }) => [styles.askFab, pressed && styles.askFabPressed]}
+        onPress={openAsk}
+        testID="home-ask-fab"
+        accessibilityRole="button"
+        accessibilityLabel="Ask SheGuard AI assistant"
+        accessibilityHint="Opens the SheGuard AI safety assistant chat"
+        hitSlop={8}
+      >
+        <Image
+          source={require('../../design/assets/sheguard_shield.png')}
+          style={styles.askFabIcon}
+          resizeMode="contain"
+          accessible={false}
+          accessibilityIgnoresInvertColors
+        />
+      </Pressable>
     </SafeAreaView>
   );
 };
@@ -194,4 +203,18 @@ const styles = StyleSheet.create({
   },
   disarmText: { color: colors.emergencyRed, fontSize: 16, fontWeight: '700' },
   pressed: { opacity: 0.85 },
+  askFab: {
+    position: 'absolute',
+    right: 20,
+    bottom: 28,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.primaryNavy,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...cardShadow,
+  },
+  askFabPressed: { opacity: 0.85 },
+  askFabIcon: { width: 32, height: 32 },
 });

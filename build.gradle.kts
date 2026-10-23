@@ -3,7 +3,6 @@
 plugins {
     alias(libs.plugins.android.application) apply false
     alias(libs.plugins.kotlin.android) apply false
-    alias(libs.plugins.kotlin.compose) apply false
 }
 
 // Values read by autolinked libraries (safeExtGet / rootProject.ext). They must match
